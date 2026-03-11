@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026 人生地圖 · 神臨農民曆</title>
+    
+    <!-- PWA 基本設定 -->
+    <meta name="theme-color" content="#800000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="人生地圖">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23800000'/%3E%3Ctext x='50' y='70' font-size='70' text-anchor='middle' fill='%23ffd966' font-family='Arial'%3E⛩️%3C/text%3E%3C/svg%3E">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22%E4%BA%BA%E7%94%9F%E5%9C%B0%E5%9C%96%202026%22%2C%22short_name%22%3A%22%E4%BA%BA%E7%94%9F%E5%9C%B0%E5%9C%96%22%2C%22description%22%3A%22%E9%9B%B2%E7%AB%AF%E9%9D%88%E5%8A%9B%E8%BD%89%E9%81%8B%E7%AB%99%20%C2%B7%20%E5%95%9F%E7%99%BC%E6%9C%AA%E4%BE%86%E7%9A%84%E4%BF%A1%E4%BB%B0%E9%AB%94%E9%A9%97%22%2C%22start_url%22%3A%22%2F%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23f4f1ea%22%2C%22theme_color%22%3A%22%23800000%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%2520viewBox%3D%270%200%20100%20100%27%253E%253Crect%2520width%3D%27100%27%2520height%3D%27100%27%2520fill%3D%27%23800000%27%2F%253E%253Ctext%2520x%3D%2750%27%2520y%3D%2770%27%2520font-size%3D%2770%27%2520text-anchor%3D%27middle%27%2520fill%3D%27%23ffd966%27%2520font-family%3D%27Arial%27%253E%26%2382119%3B%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lunar-javascript/lunar.js"></script>
+    
+    <!-- Service Worker 註冊 -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                // 建立 Service Worker 內容
+                const swCode = `
+                    const CACHE_NAME = 'lifemap-v1';
+                    const urlsToCache = [
+                        '/',
+                        'https://cdn.tailwindcss.com',
+                        'https://cdn.jsdelivr.net/npm/lunar-javascript/lunar.js',
+                        'https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;900&display=swap'
+                    ];
+
+                    self.addEventListener('install', event => {
+                        event.waitUntil(
+                            caches.open(CACHE_NAME)
+                                .then(cache => cache.addAll(urlsToCache))
+                        );
+                    });
+
+                    self.addEventListener('fetch', event => {
+                        event.respondWith(
+                            caches.match(event.request)
+                                .then(response => response || fetch(event.request))
+                        );
+                    });
+
+                    self.addEventListener('activate', event => {
+                        event.waitUntil(
+                            caches.keys().then(cacheNames => {
+                                return Promise.all(
+                                    cacheNames.map(cacheName => {
+                                        if (cacheName !== CACHE_NAME) {
+                                            return caches.delete(cacheName);
+                                        }
+                                    })
+                                );
+                            })
+                        );
+                    });
+                `;
+                
+                const blob = new Blob([swCode], { type: 'application/javascript' });
+                const swUrl = URL.createObjectURL(blob);
+                
+                navigator.serviceWorker.register(swUrl)
+                    .then(registration => {
+                        console.log('PWA Service Worker 註冊成功', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('PWA Service Worker 註冊失敗', error);
+                    });
+            });
+        }
+    </script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;900&display=swap');
+        body { font-family: 'Noto Serif TC', serif; background-color: #f4f1ea; color: #2d241e; }
+        
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background-color: #e5e0d5; }
+        .day-cell { background-color: white; aspect-ratio: 1 / 1.1; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s; }
+        .day-cell.active { background-color: #8b0000 !important; color: white !important; z-index: 10; transform: scale(1.05); }
+        
+        .sun, .sat { color: #d97706; }
+        .temple-header { 
+            background: linear-gradient(135deg, #a52a2a, #800000); 
+            position: relative; 
+            overflow: hidden; 
+            min-height: 120px;
+            z-index: 1;
+        }
+        .blessing-card { background: #fffdf9; border: 1px solid #e2d7c7; border-radius: 12px; }
+        
+        .jia-shake { animation: shake 0.5s infinite; }
+        @keyframes shake { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(10deg); } 75% { transform: rotate(-10deg); } }
+
+        /* 神仙動畫 */
+        .deity-animation-area {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 20;
+            overflow: hidden;
+        }
+        
+        .flying-deity {
+            position: absolute;
+            font-size: 2.8rem;
+            filter: drop-shadow(0 0 15px gold) drop-shadow(0 0 30px #ffaa00);
+            white-space: nowrap;
+            opacity: 0;
+            animation: flyIntoShrine 6s ease-in-out infinite;
+            text-shadow: 0 0 20px rgba(255,215,0,0.8);
+            transform-origin: center;
+        }
+        
+        .deity1 { top: 10%; left: -10%; animation-delay: 0s; }
+        .deity2 { top: 30%; left: -15%; animation-delay: 1.2s; }
+        .deity3 { top: 50%; left: -5%; animation-delay: 2.5s; }
+        .deity4 { top: 70%; left: -20%; animation-delay: 3.8s; }
+        .deity5 { top: 20%; left: -25%; animation-delay: 5s; }
+        .deity6 { top: 80%; left: -8%; animation-delay: 0.7s; }
+        .deity7 { top: 40%; left: -18%; animation-delay: 2.0s; }
+        .deity8 { top: 60%; left: -12%; animation-delay: 4.2s; }
+
+        @keyframes flyIntoShrine {
+            0% { opacity: 0; transform: translateX(0) translateY(30px) scale(0.3) rotate(-15deg); }
+            15% { opacity: 1; transform: translateX(30vw) translateY(0) scale(1.3) rotate(0deg); }
+            40% { opacity: 1; transform: translateX(60vw) translateY(-20px) scale(1.4) rotate(5deg); }
+            65% { opacity: 0.9; transform: translateX(80vw) translateY(10px) scale(1.2) rotate(-5deg); }
+            100% { opacity: 0; transform: translateX(120vw) translateY(-30px) scale(0.8) rotate(10deg); }
+        }
+
+        .temple-glow {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 30% 40%, rgba(255,215,0,0.25) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 15;
+            animation: glowPulse 3s infinite;
+        }
+        
+        @keyframes glowPulse { 0%,100% { opacity: 0.4; } 50% { opacity: 0.8; } }
+
+        .flying-deity { animation-iteration-count: infinite; animation-timing-function: cubic-bezier(0.42, 0, 0.58, 1); }
+        .yi-ji-min-height { min-height: 70px; }
+
+        /* =====  CSS 神宮 ===== */
+        .shrine-container {
+            background: #2d241e;
+            padding: 30px 20px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 10px 20px rgba(0,0,0,0.5);
+        }
+        
+        .shrine-title {
+            color: #e5d5b5;
+            font-size: 14px;
+            letter-spacing: 6px;
+            text-shadow: 0 0 8px gold;
+            margin-bottom: 25px;
+            font-weight: 300;
+            border-bottom: 1px solid #b8860b;
+            padding-bottom: 8px;
+            display: inline-block;
+        }
+
+        /* 神社主體 */
+        .shrine {
+            position: relative;
+            width: 280px;
+            height: 200px;
+            margin: 0 auto;
+            filter: drop-shadow(0 15px 15px rgba(0,0,0,0.6));
+        }
+
+        /* 地基 */
+        .base {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 30px;
+            background: linear-gradient(145deg, #6b4f3a, #3f2e1f);
+            border-radius: 20px 20px 0 0;
+            border-bottom: 4px solid #b17e55;
+            box-shadow: 0 -5px 0 #1a130e;
+            z-index: 10;
+        }
+
+        /* 台階 */
+        .steps {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 160px;
+            height: 18px;
+            background: #8b6b4f;
+            border-radius: 8px 8px 0 0;
+            border-bottom: 3px solid #5a3f2b;
+            z-index: 9;
+        }
+        .steps::before {
+            content: '';
+            position: absolute;
+            bottom: 18px;
+            left: 15px;
+            width: 130px;
+            height: 16px;
+            background: #a57c5a;
+            border-radius: 8px 8px 0 0;
+            border-bottom: 3px solid #6d4f34;
+        }
+        .steps::after {
+            content: '';
+            position: absolute;
+            bottom: 34px;
+            left: 30px;
+            width: 100px;
+            height: 16px;
+            background: #be9b78;
+            border-radius: 8px 8px 0 0;
+            border-bottom: 3px solid #8b653f;
+        }
+
+        /* 柱子 */
+        .pillar {
+            position: absolute;
+            bottom: 30px;
+            width: 20px;
+            height: 110px;
+            background: linear-gradient(90deg, #9c7c5c, #5d402a);
+            border-radius: 10px 10px 0 0;
+            border: 2px solid #4a311e;
+            box-shadow: inset -3px -3px 10px #2d1e12;
+            z-index: 12;
+        }
+        .pillar-left { left: 40px; }
+        .pillar-right { right: 40px; }
+
+        /* 橫樑 */
+        .beam {
+            position: absolute;
+            bottom: 135px;
+            width: 100%;
+            height: 18px;
+            background: #7b5f44;
+            border-radius: 4px;
+            box-shadow: 0 4px 0 #4e3824;
+            z-index: 13;
+        }
+
+        /* 屋頂 */
+        .roof {
+            position: absolute;
+            bottom: 140px;
+            width: 100%;
+            height: 70px;
+            background: #2a2019;
+            clip-path: polygon(0% 0%, 100% 0%, 85% 100%, 15% 100%);
+            border-bottom: 6px solid #b8860b;
+            box-shadow: inset 0 10px 15px #5a3e28;
+            z-index: 14;
+        }
+        
+        /* 屋頂裝飾 (鴟尾) */
+        .roof-deco-left, .roof-deco-right {
+            position: absolute;
+            bottom: 190px;
+            width: 20px;
+            height: 30px;
+            background: #b78d5a;
+            clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+            z-index: 15;
+            filter: drop-shadow(0 4px 2px #3a281c);
+        }
+        .roof-deco-left { left: 15px; transform: rotate(-10deg); }
+        .roof-deco-right { right: 15px; transform: rotate(10deg); }
+
+        /* 屋頂瓦紋 */
+        .roof::before {
+            content: '≡≡≡≡≡≡≡≡≡≡';
+            position: absolute;
+            bottom: 10px;
+            left: 15%;
+            color: #c9a87c;
+            font-size: 20px;
+            letter-spacing: 6px;
+            opacity: 0.3;
+            white-space: nowrap;
+        }
+
+        /* 鈴鐺 */
+        .bell {
+            position: absolute;
+            bottom: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 32px;
+            height: 42px;
+            background: #c99f37;
+            border-radius: 50% 50% 30% 30%;
+            border-bottom: 5px solid #8b691b;
+            z-index: 20;
+            box-shadow: 0 0 15px #ffd966;
+            animation: bellSway 3s ease-in-out infinite;
+            transform-origin: top center;
+        }
+        .bell::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: 12px;
+            width: 8px;
+            height: 10px;
+            background: #ad7a3b;
+            border-radius: 2px;
+        }
+        .bell::after {
+            content: '•';
+            position: absolute;
+            bottom: 5px;
+            left: 13px;
+            font-size: 22px;
+            color: #4d2f0a;
+        }
+        @keyframes bellSway {
+            0%,100% { transform: translateX(-50%) rotate(0deg); }
+            25% { transform: translateX(-50%) rotate(8deg); }
+            75% { transform: translateX(-50%) rotate(-8deg); }
+        }
+
+        /* 注連繩 (稻草繩) */
+        .shimenawa {
+            position: absolute;
+            bottom: 155px;
+            left: 20px;
+            width: 240px;
+            height: 10px;
+            background: #b5976b;
+            border-radius: 20px;
+            transform: rotate(1deg);
+            box-shadow: 0 3px 0 #6f4f2b;
+            z-index: 25;
+            opacity: 0.8;
+        }
+        .shimenawa::before, .shimenawa::after {
+            content: '⚡';
+            position: absolute;
+            font-size: 22px;
+            color: #eed484;
+            text-shadow: 0 2px 3px black;
+            top: -15px;
+        }
+        .shimenawa::before { left: 30px; transform: rotate(-20deg); }
+        .shimenawa::after { right: 30px; transform: rotate(20deg); }
+
+        /* 雲海 */
+        .shrine-cloud {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            background: radial-gradient(circle at 20% 100%, rgba(255,240,200,0.15) 0%, transparent 60%);
+            filter: blur(5px);
+        }
+
+        /* 燈籠 */
+        .lantern-left, .lantern-right {
+            position: absolute;
+            bottom: 40px;
+            width: 18px;
+            height: 45px;
+            background: #b32e2e;
+            border-radius: 8px 8px 4px 4px;
+            border-bottom: 4px solid #631919;
+            box-shadow: 0 0 15px #ff7b7b;
+            z-index: 30;
+        }
+        .lantern-left { left: 10px; }
+        .lantern-right { right: 10px; }
+        .lantern-left::before, .lantern-right::before {
+            content: '●';
+            position: absolute;
+            top: -12px;
+            left: 4px;
+            color: #ffcf9a;
+            font-size: 16px;
+        }
+        .lantern-left::after, .lantern-right::after {
+            content: '福';
+            position: absolute;
+            top: 12px;
+            left: 3px;
+            color: #ffd966;
+            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 0 0 5px gold;
+        }
+        
+        /* Email連結按鈕樣式 */
+        .email-button {
+            transition: all 0.3s;
+        }
+        .email-button:hover {
+            background-color: #991b1b;
+            transform: scale(1.02);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+
+        /* PWA 安裝提示 */
+        .install-prompt {
+            background: linear-gradient(135deg, #2d241e, #4a3729);
+            color: #ffd966;
+            padding: 10px;
+            text-align: center;
+            font-size: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #b8860b;
+            display: none;
+        }
+        .install-prompt.show {
+            display: block;
+        }
+    </style>
+</head>
+<body class="max-w-md mx-auto min-h-screen shadow-2xl bg-white flex flex-col">
+
+    <!-- PWA 安裝提示 (僅在可安裝時顯示) -->
+    <div id="installPrompt" class="install-prompt" onclick="installPWA()">
+        ⬇️ 點擊安裝「人生地圖」至主畫面 ⬇️
+    </div>
+
+    <header class="temple-header p-5 text-center text-white shadow-xl relative">
+        <div class="deity-animation-area">
+            <span class="flying-deity deity1">👑</span>
+            <span class="flying-deity deity2">🧧</span>
+            <span class="flying-deity deity3">🌿</span>
+            <span class="flying-deity deity4">⚡</span>
+            <span class="flying-deity deity5">📜</span>
+            <span class="flying-deity deity6">🍑</span>
+            <span class="flying-deity deity7">🐉</span>
+            <span class="flying-deity deity8">⭐</span>
+        </div>
+        <div class="temple-glow"></div>
+        <h1 class="text-xl font-black tracking-[0.25em] relative z-30">人生地圖 LIFEMAP</h1>
+        <p class="text-[9px] opacity-80 mt-1 tracking-widest uppercase relative z-30">雲端靈力轉運站 · 啟發未來的信仰體驗</p>
+    </header>
+
+    <div class="flex justify-between items-center px-6 py-4 bg-stone-50 border-b">
+        <button onclick="changeMonth(-1)" class="p-2 text-stone-400 hover:text-red-800 text-2xl">❮</button>
+        <h2 id="monthTitle" class="font-black text-lg text-stone-800 italic">2026年 3月</h2>
+        <button onclick="changeMonth(1)" class="p-2 text-stone-400 hover:text-red-800 text-2xl">❯</button>
+    </div>
+
+    <div id="calendarBody" class="calendar-grid"></div>
+
+    <section id="lunarPanel" class="p-6 bg-[#fffdf9] space-y-6">
+        <div class="flex justify-between items-end border-b-2 border-stone-100 pb-4">
+            <div>
+                <div id="p-solar" class="text-3xl font-black text-stone-900">3月11日</div>
+                <div id="p-lunar" class="text-red-800 font-bold text-sm">農曆 正月廿三</div>
+            </div>
+            <div class="text-right">
+                <div id="p-ganzhi" class="text-xs text-stone-500">丙午年 辛丑月 丁卯日</div>
+                <div id="p-wuxing" class="text-xs font-bold text-stone-600 bg-stone-100 px-2 py-0.5 rounded mt-1 inline-block">五行：爐中火</div>
+            </div>
+        </div>
+
+        <div class="blessing-card p-4 border-l-4 border-l-red-800">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="bg-red-800 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">今日沖煞</span>
+                <span id="p-chong" class="font-bold text-red-700 text-sm italic">沖(庚辰)龍 煞北</span>
+            </div>
+            <p id="p-shengxiao-advice" class="text-[11px] text-stone-500 italic"></p>
+        </div>
+
+        <div class="blessing-card p-5 text-center shadow-inner">
+            <h4 class="text-[10px] font-black text-stone-400 mb-4 tracking-[0.3em] uppercase text-center">一處祈福 · 多廟共鳴</h4>
+            <div id="jia-display" class="flex justify-center gap-4 mb-3">
+                <span class="text-4xl">🌙</span><span class="text-4xl">⭐</span>
+            </div>
+            <div id="jia-result" class="text-sm font-bold text-red-900 h-6 mb-4">誠心默念祈願</div>
+            <div class="flex flex-col gap-2">
+                <button onclick="tossJia()" class="w-full bg-red-900 text-white py-3 rounded-lg font-bold text-xs tracking-widest shadow-lg active:scale-95">數位擲筊 · 即時護佑</button>
+                
+                <!-- 留言上傳按鈕 - 直接連接 Email -->
+                <a href="mailto:501.esg@udmgroup.com?subject=人生地圖%20祈福留言&body=您好，%0D%0A%0D%0A我在%20[請填寫日期]%20誠心祈求：%0D%0A%0D%0A願望：%0D%0A姓名：%0D%0A聯絡方式：%0D%0A%0D%0A感謝神恩。"
+                   class="w-full bg-red-900 text-white py-3 rounded-lg font-bold text-xs tracking-widest shadow-lg text-center block email-button hover:bg-red-800 transition-all">
+                    留言上傳 · 全網同步
+                </a>
+            </div>
+            <p class="text-[9px] text-stone-400 mt-3 italic">「讓焦慮轉化為安定的力量」</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+            <div class="p-3 bg-green-50/50 rounded-lg border border-green-100 yi-ji-min-height">
+                <span class="text-green-800 font-black text-xs italic">【 宜 】</span>
+                <p id="p-yi" class="text-xs text-stone-600 mt-2 leading-relaxed font-bold">祭祀 祈福 求財</p>
+            </div>
+            <div class="p-3 bg-red-50/50 rounded-lg border border-red-100 yi-ji-min-height">
+                <span class="text-red-800 font-black text-xs italic">【 忌 】</span>
+                <p id="p-ji" class="text-xs text-stone-600 mt-2 leading-relaxed font-bold">入宅 安葬 出行</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- =====  CSS 神宮區塊 ===== -->
+    <div class="shrine-container">
+        <div class="shrine-title">⛩️ 神 宮 ・ 靈 境 ⛩️</div>
+        
+        <div class="shrine">
+            <!-- 地基與台階 -->
+            <div class="base"></div>
+            <div class="steps"></div>
+            
+            <!-- 柱子 -->
+            <div class="pillar pillar-left"></div>
+            <div class="pillar pillar-right"></div>
+            
+            <!-- 橫樑 -->
+            <div class="beam"></div>
+            
+            <!-- 屋頂與裝飾 -->
+            <div class="roof"></div>
+            <div class="roof-deco-left"></div>
+            <div class="roof-deco-right"></div>
+            
+            <!-- 鈴鐺 (搖曳) -->
+            <div class="bell"></div>
+            
+            <!-- 注連繩 (神聖標誌) -->
+            <div class="shimenawa"></div>
+            
+            <!-- 燈籠 (左右) -->
+            <div class="lantern-left"></div>
+            <div class="lantern-right"></div>
+            
+            <!-- 雲霧 -->
+            <div class="shrine-cloud"></div>
+        </div>
+        
+        <p class="text-[10px] text-amber-600/70 mt-6 tracking-widest">▾ 誠心參拜 · 神恩降臨 ▾</p>
+    </div>
+
+    <footer class="p-8 text-center bg-stone-50 space-y-2">
+        <p class="text-[10px] text-stone-400 tracking-widest">數位技術支援：景煬/皓樣科技 | 2026 丙午年智慧曆書</p>
+        <p class="text-[10px] text-stone-400 font-medium italic">AI/ESG | 專業設計 專業碳盤查 | <span class="text-red-800/80">雲端串起百年香火</span></p>
+    </footer>
+
+    <script>
+        let currentYear = 2026;
+        let currentMonth = 2;
+        let selectedDate = new Date(2026, 2, 11);
+        let deferredPrompt;
+
+        function renderCalendar() {
+            const container = document.getElementById('calendarBody');
+            const title = document.getElementById('monthTitle');
+            const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+            
+            container.innerHTML = '';
+            title.innerText = `${currentYear}年 ${currentMonth + 1}月`;
+
+            for (let i = 0; i < firstDay; i++) {
+                container.innerHTML += `<div class="day-cell bg-stone-50/50"></div>`;
+            }
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const date = new Date(currentYear, currentMonth, d);
+                const l = Lunar.fromDate(date);
+                const isSelected = date.toDateString() === selectedDate.toDateString();
+                const dayOfWeek = date.getDay();
+                let colorClass = (dayOfWeek === 0 || dayOfWeek === 6) ? 'sun' : 'text-stone-700';
+
+                container.innerHTML += `
+                    <div onclick="selectDate(${currentYear}, ${currentMonth}, ${d})" 
+                         class="day-cell ${isSelected ? 'active shadow-lg' : ''} ${colorClass}">
+                        <span class="text-sm font-black">${d}</span>
+                        <span class="text-[9px] opacity-70 font-medium">${l.getDayInChinese()}</span>
+                    </div>`;
+            }
+            updateDetail(selectedDate);
+        }
+
+        function selectDate(y, m, d) {
+            selectedDate = new Date(y, m, d);
+            renderCalendar();
+        }
+
+        function updateDetail(date) {
+            try {
+                const l = Lunar.fromDate(date);
+                
+                document.getElementById('p-solar').innerText = `${date.getMonth()+1}月${date.getDate()}日`;
+                document.getElementById('p-lunar').innerText = `農曆 ${l.getMonthInChinese()}月${l.getDayInChinese()}`;
+                document.getElementById('p-ganzhi').innerText = `${l.getYearInGanZhi()}年 ${l.getMonthInGanZhi()}月 ${l.getDayInGanZhi()}日`;
+                document.getElementById('p-wuxing').innerText = `五行：${l.getDayNaYin()}`;
+                
+                const chongShengXiao = l.getDayChongShengXiao() || '?';
+                const chongGanZhi = l.getDayChongGanZhi() || '?';
+                const sha = l.getDaySha() || '?';
+                document.getElementById('p-chong').innerText = `沖(${chongGanZhi})${chongShengXiao} 煞${sha}`;
+                
+                const yiList = l.getDayYi();
+                const jiList = l.getDayJi();
+                
+                document.getElementById('p-yi').innerText = (yiList && yiList.length > 0) ? yiList.slice(0, 8).join('、') : '祭祀 祈福 求財 嫁娶 開市 入學 出行 動土';
+                document.getElementById('p-ji').innerText = (jiList && jiList.length > 0) ? jiList.slice(0, 8).join('、') : '入宅 安葬 破土 安床 掘井 開池 置產 納畜';
+                
+                const xiPos = l.getDayPositionXi() || '正南';
+                document.getElementById('p-shengxiao-advice').innerText = `※ 本日屬${chongShengXiao}者受沖，宜靜思守成。吉祥位：${xiPos}方。`;
+            } catch (e) {
+                console.error('lunar更新錯誤', e);
+                document.getElementById('p-yi').innerText = '祭祀 祈福 出行 嫁娶 開市 入學 動土 求財';
+                document.getElementById('p-ji').innerText = '入宅 安葬 破土 安床 掘井 開池 置產 納畜';
+                document.getElementById('p-shengxiao-advice').innerText = '※ 本日屬龍者受沖，宜靜思守成。吉祥位：正南方。';
+            }
+        }
+
+        function tossJia() {
+            const res = document.getElementById('jia-result');
+            const disp = document.getElementById('jia-display');
+            disp.classList.add('jia-shake');
+            res.innerText = "祈請神明加持...";
+            
+            setTimeout(() => {
+                disp.classList.remove('jia-shake');
+                const r1 = Math.random() > 0.5;
+                const r2 = Math.random() > 0.5;
+                disp.innerHTML = `<span class="text-4xl">${r1?'🌕':'🌙'}</span><span class="text-4xl">${r2?'⭐':'✨'}</span>`;
+                
+                if (r1 !== r2) {
+                    res.innerHTML = '<span class="text-red-700 text-lg">【聖筊】 祈願已同步，大吉！</span>';
+                } else if (r1 && r2) {
+                    res.innerHTML = '<span class="text-amber-700">【笑筊】 心誠則靈，歡喜以對</span>';
+                } else {
+                    res.innerHTML = '<span class="text-stone-500">【陰筊】 靜心沉澱，再祈一次</span>';
+                }
+            }, 600);
+        }
+
+        function changeMonth(s) { 
+            currentMonth += s; 
+            if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+            if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+            renderCalendar(); 
+        }
+
+        // PWA 安裝處理
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            document.getElementById('installPrompt').classList.add('show');
+        });
+
+        window.addEventListener('appinstalled', () => {
+            document.getElementById('installPrompt').classList.remove('show');
+            console.log('PWA 安裝成功');
+        });
+
+        function installPWA() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('使用者同意安裝');
+                    }
+                    deferredPrompt = null;
+                    document.getElementById('installPrompt').classList.remove('show');
+                });
+            }
+        }
+
+        window.onload = () => {
+            renderCalendar();
+            
+            // 定期檢查神仙動畫是否存在
+            setInterval(() => {
+                const deities = document.querySelectorAll('.flying-deity');
+                if (deities.length === 0) {
+                    const area = document.querySelector('.deity-animation-area');
+                    if (area) {
+                        area.innerHTML = `
+                            <span class="flying-deity deity1">👑</span>
+                            <span class="flying-deity deity2">🧧</span>
+                            <span class="flying-deity deity3">🌿</span>
+                            <span class="flying-deity deity4">⚡</span>
+                            <span class="flying-deity deity5">📜</span>
+                            <span class="flying-deity deity6">🍑</span>
+                            <span class="flying-deity deity7">🐉</span>
+                            <span class="flying-deity deity8">⭐</span>
+                        `;
+                    }
+                }
+            }, 1000);
+        };
+    </script>
+</body>
+</html>
